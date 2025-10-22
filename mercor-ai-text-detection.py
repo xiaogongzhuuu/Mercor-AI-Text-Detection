@@ -46,7 +46,62 @@ class statistical_feature_extractor():#传统统计特征提取
       features['digits'] = df['answer'].str.count(r'\d')
       features['digit_ratio'] = features['digits'] / (features['length'] + 1)
 
+      # 1. 连续性特征
+      features['avg_word_freq'] = df['answer'].apply(self._word_frequency_variance)
+        
+        # 2. 结构规律性
+      features['sentence_length_variance'] = df['answer'].apply(self._sentence_length_variance)
+        
+        # 3. 常见AI短语检测
+      ai_phrases = ['as an ai', 'i am an', 'i cannot', 'i apologize', 'in conclusion', 
+                      'furthermore', 'moreover', 'it is important to note']
+      for phrase in ai_phrases:
+          features[f'phrase_{phrase.replace(" ", "_")}'] = df['answer'].str.lower().str.contains(phrase).astype(int)
+        
+        # 4. 停用词比例
+      features['stopword_ratio'] = df['answer'].apply(self._stopword_ratio)
+        
+        # 5. 平均词长方差
+      features['word_length_variance'] = df['answer'].apply(self._word_length_variance)
+      
       return features.values
+
+    def _word_frequency_variance(self, text):
+        """计算词频方差（AI文本通常词频更均匀）"""
+        words = str(text).lower().split()
+        if len(words) < 2:
+            return 0
+        from collections import Counter
+        word_counts = Counter(words)
+        frequencies = list(word_counts.values())
+        return np.var(frequencies) if len(frequencies) > 1 else 0
+
+    def _sentence_length_variance(self, text):
+        """计算句子长度方差"""
+        import re
+        sentences = re.split(r'[.!?]+', str(text))
+        lengths = [len(s.split()) for s in sentences if s.strip()]
+        return np.var(lengths) if len(lengths) > 1 else 0
+
+    def _stopword_ratio(self, text):
+        """计算停用词比例"""
+        stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+                     'of', 'with', 'is', 'are', 'was', 'were', 'be', 'been', 'being'}
+        words = str(text).lower().split()
+        if not words:
+            return 0
+        stop_count = sum(1 for w in words if w in stopwords)
+        return stop_count / len(words)
+
+    def _word_length_variance(self, text):
+        """计算词长方差"""
+        words = str(text).split()
+        if len(words) < 2:
+            return 0
+        lengths = [len(w) for w in words]
+        return np.var(lengths)
+
+        
         
 
 class feature_connector():#embedding与特征工程整合
@@ -76,7 +131,7 @@ class feature_connector():#embedding与特征工程整合
 
 class ai_text_detector():
     def __init__(self):
-        self.model=LogisticRegression(max_iter=1000)
+        self.model=LogisticRegression(C=0.5,max_iter=1000)
 
     def train(self,X_train,y_train):
         self.model.fit(X_train,y_train)
